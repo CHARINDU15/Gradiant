@@ -3,49 +3,25 @@ import numpy as np
 import utlis
 import pandas as pd
 from datetime import datetime
-from pyzbar.pyzbar import decode
 import keyboard 
 import tkinter as tk
 from tkinter import messagebox
 import os
-############################################
-def get_qr_code_data(image):
-    decoded_objects = decode(image)
-    qr_data = None
-    for obj in decoded_objects:
-        qr_data = obj.data.decode('utf-8')
-        # Draw a rectangle around the detected QR code
-        points = obj.polygon
-        if len(points) == 4:
-            pts = np.array(points, dtype=np.int32)
-            pts = pts.reshape((-1, 1, 2))
-            cv2.polylines(image, [pts], True, (0, 255, 0), 2)
-    return qr_data
-
-######################################################################
-
-def show_popup_message(title, message):
-    root = tk.Tk()
-    root.withdraw()
-    messagebox.showinfo(title, message)
-    root.update() 
-    root.destroy()
 
 
-########################################################################
 webCamFeed = True
 pathImage = "7.jpg"
-ip_path = "http://192.168.8.100:8080/video"
+ip_path = "http://192.168.57.28:8080/video"
 cap = cv2.VideoCapture(0)
-#if not cap.isOpened:
- #   cap = cv2.VideoCapture(0)
+if not cap.isOpened:
+    cap = cv2.VideoCapture(ip_path)
 
 cap.set(10,160)
 heightImg = 700
 widthImg  = 700
-questions=5
-choices=5
-ans= [1,0,3,0,2]
+questions=utlis.get_number_of_questions()
+choices=utlis.get_number_of_choices()
+ans= utlis.get_answers(questions,choices)
 count = 0
 results = []  # List to store scan results
 df = pd.DataFrame(columns=['Index', 'Score', 'Timestamp'])
@@ -54,7 +30,16 @@ saved_once = False
 previous_index = "unknown"
 file_path = "C:/Users/USER/Downloads/pics/my.xlsx"
 message_results = []
-########################################################################
+
+
+
+def show_popup_message(title, message):
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showinfo(title, message)
+    root.update() 
+    root.destroy()
+
 
 def reset_variables():
     global count, svaedint, df, results
@@ -82,97 +67,95 @@ while True:
         if not success:
             img = cv2.imread(pathImage)
     else:img = cv2.imread(pathImage)
-    img = cv2.resize(img, (widthImg, heightImg)) # RESIZE IMAGE
+    img = cv2.resize(img, (widthImg, heightImg)) 
     imgFinal = img.copy()
-    imgBlank = np.zeros((heightImg,widthImg, 3), np.uint8) # CREATE A BLANK IMAGE FOR TESTING DEBUGGING IF REQUIRED
-    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) # CONVERT IMAGE TO GRAY SCALE
-    imgBlur = cv2.GaussianBlur(imgGray, (5, 5), 1) # ADD GAUSSIAN BLUR, why find the eedges corectly
-    imgCanny = cv2.Canny(imgBlur,10,70) # APPLY CANNY 
+    imgBlank = np.zeros((heightImg,widthImg, 3), np.uint8) 
+    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) 
+    imgBlur = cv2.GaussianBlur(imgGray, (5, 5), 1) 
+    imgCanny = cv2.Canny(imgBlur,10,70)
 
-    qr_data = get_qr_code_data(img)
+    qr_data = utlis.get_qr_code_data(img)
     if qr_data is None:
         qr_data = "Unknown"
-         # Default value if no QR code is found
+         
     try:
         if qr_data != "Unknown" and qr_data != previous_index:
             saved_once = False
         
-        ## FIND ALL COUNTOURS
-        imgContours = img.copy() # COPY IMAGE FOR DISPLAY PURPOSES
-        imgBigContour = img.copy() # COPY IMAGE FOR DISPLAY PURPOSES
-        contours, hierarchy = cv2.findContours(imgCanny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) # FIND ALL CONTOURS
-        cv2.drawContours(imgContours, contours, -1, (0, 255, 0), 10) # DRAW ALL DETECTED CONTOURS
-        rectCon = utlis.rectContour(contours) # FILTER FOR RECTANGLE CONTOURS
-        biggestPoints= utlis.getCornerPoints(rectCon[0]) # GET CORNER POINTS OF THE BIGGEST RECTANGLE
-        gradePoints = utlis.getCornerPoints(rectCon[1]) # GET CORNER POINTS OF THE SECOND BIGGEST RECTANGLE
-
+       
+        imgContours = img.copy() 
+        imgBigContour = img.copy() 
+        contours, hierarchy = cv2.findContours(imgCanny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) 
+        cv2.drawContours(imgContours, contours, -1, (0, 255, 0), 10)
+        rectCon = utlis.rectContour(contours)
+        biggestPoints= utlis.getCornerPoints(rectCon[0]) 
+        gradePoints = utlis.getCornerPoints(rectCon[1]) 
         
 
         if biggestPoints.size != 0 and gradePoints.size != 0:
 
-            # BIGGEST RECTANGLE WARPING
-            biggestPoints=utlis.reorder(biggestPoints) # REORDER FOR WARPING
-            cv2.drawContours(imgBigContour, biggestPoints, -1, (0, 255, 0), 20) # DRAW THE BIGGEST CONTOUR
-            pts1 = np.float32(biggestPoints) # PREPARE POINTS FOR WARP
-            pts2 = np.float32([[0, 0],[widthImg, 0], [0, heightImg],[widthImg, heightImg]]) # PREPARE POINTS FOR WARP
-            matrix = cv2.getPerspectiveTransform(pts1, pts2) # GET TRANSFORMATION MATRIX
-            imgWarpColored = cv2.warpPerspective(img, matrix, (widthImg, heightImg)) # APPLY WARP PERSPECTIVE
+            
+            biggestPoints=utlis.reorder(biggestPoints) 
+            cv2.drawContours(imgBigContour, biggestPoints, -1, (0, 255, 0), 20) 
+            pts1 = np.float32(biggestPoints) 
+            pts2 = np.float32([[0, 0],[widthImg, 0], [0, heightImg],[widthImg, heightImg]]) 
+            matrix = cv2.getPerspectiveTransform(pts1, pts2) 
+            imgWarpColored = cv2.warpPerspective(img, matrix, (widthImg, heightImg)) 
 
-            # SECOND BIGGEST RECTANGLE WARPING
-            cv2.drawContours(imgBigContour, gradePoints, -1, (255, 0, 0), 20) # DRAW THE BIGGEST CONTOUR
-            gradePoints = utlis.reorder(gradePoints) # REORDER FOR WARPING
-            ptsG1 = np.float32(gradePoints)  # PREPARE POINTS FOR WARP
-            ptsG2 = np.float32([[0, 0], [325, 0], [0, 150], [325, 150]])  # PREPARE POINTS FOR WARP
-            matrixG = cv2.getPerspectiveTransform(ptsG1, ptsG2)# GET TRANSFORMATION MATRIX
-            imgGradeDisplay = cv2.warpPerspective(img, matrixG, (325, 150)) # APPLY WARP PERSPECTIVE
+            
+            cv2.drawContours(imgBigContour, gradePoints, -1, (255, 0, 0), 20) 
+            gradePoints = utlis.reorder(gradePoints) 
+            ptsG1 = np.float32(gradePoints)  
+            ptsG2 = np.float32([[0, 0], [325, 0], [0, 150], [325, 150]])  
+            matrixG = cv2.getPerspectiveTransform(ptsG1, ptsG2)
+            imgGradeDisplay = cv2.warpPerspective(img, matrixG, (325, 150)) 
 
-            # APPLY THRESHOLD
-            imgWarpGray = cv2.cvtColor(imgWarpColored,cv2.COLOR_BGR2GRAY) # CONVERT TO GRAYSCALE
-            imgThresh = cv2.threshold(imgWarpGray, 170, 255,cv2.THRESH_BINARY_INV )[1] # APPLY THRESHOLD AND INVERSE
-
-            boxes = utlis.splitBoxes(imgThresh) # GET INDIVIDUAL BOXES
-            cv2.imshow("Split Test ", boxes[3])
+            
+            imgWarpGray = cv2.cvtColor(imgWarpColored,cv2.COLOR_BGR2GRAY) 
+            imgThresh = cv2.threshold(imgWarpGray, 170, 255,cv2.THRESH_BINARY_INV )[1] 
+            boxes = utlis.splitBoxes(imgThresh,questions,choices) 
+            
             countR=0
             countC=0
-            myPixelVal = np.zeros((questions,choices)) # TO STORE THE NON ZERO VALUES OF EACH BOX
+            myPixelVal = np.zeros((questions,choices)) 
             for image in boxes:
-                #cv2.imshow(str(countR)+str(countC),image)
+                
                 totalPixels = cv2.countNonZero(image)
                 myPixelVal[countR][countC]= totalPixels
                 countC += 1
                 if (countC==choices):countC=0;countR +=1
 
-            # FIND THE USER ANSWERS AND PUT THEM IN A LIST
+            
             myIndex=[]
             for x in range (0,questions):
                 arr = myPixelVal[x]
                 myIndexVal = np.where(arr == np.amax(arr))
                 myIndex.append(myIndexVal[0][0])
-            #print("USER ANSWERS",myIndex)
+           
 
-            # COMPARE THE VALUES TO FIND THE CORRECT ANSWERS
+        
             grading=[]
             for x in range(0,questions):
                 if ans[x] == myIndex[x]:
                     grading.append(1)
                 else:grading.append(0)
-            #print("GRADING",grading)
-            score = (sum(grading)/questions)*100 # FINAL GRADE
-            #print("SCORE",score)
+            
+            score = (sum(grading)/questions)*100 
+            
             
 
          
             if qr_data != "Unknown" and qr_data != previous_index: 
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-                # Check if the scanned QR code already exists in the DataFrame
+                
                 existing_row_index = df[df['Index'] == qr_data].index
 
                 if not existing_row_index.empty:
-                    # Update the existing record with new data (replace the old one)
+                    
                     df.loc[existing_row_index, 'Score'] = score
                     df.loc[existing_row_index, 'Timestamp'] = timestamp
-                    message_results.append({'Index': qr_data, 'Score': score, 'Timestamp': timestamp})  # Add the updated data to message list
+                    message_results.append({'Index': qr_data, 'Score': score, 'Timestamp': timestamp})  
                 else:
                     results.append({'Index': qr_data, 'Score': score, 'Timestamp': timestamp})
                     new_df = pd.DataFrame(results)
@@ -184,33 +167,33 @@ while True:
                 
               
                 try:
-                    # Create a formatted message including the results
+                    
                     results_message = "\n".join([f"Index: {res['Index']}, Score: {res['Score']}, Timestamp: {res['Timestamp']}" for res in message_results])
                     message = f"Success!!!!\nYou have successfully indexed:\n{results_message}"
                     show_popup_message("Success", message)
                 except Exception as e:
                     print(f"Error displaying popup: {e}")
 
-            # DISPLAYING ANSWERS
-            utlis.showAnswers(imgWarpColored,myIndex,grading,ans) # DRAW DETECTED ANSWERS
-            utlis.drawGrid(imgWarpColored) # DRAW GRID
-            imgRawDrawings = np.zeros_like(imgWarpColored) # NEW BLANK IMAGE WITH WARP IMAGE SIZE
-            utlis.showAnswers(imgRawDrawings, myIndex, grading, ans) # DRAW ON NEW IMAGE
-            invMatrix = cv2.getPerspectiveTransform(pts2, pts1) # INVERSE TRANSFORMATION MATRIX
-            imgInvWarp = cv2.warpPerspective(imgRawDrawings, invMatrix, (widthImg, heightImg)) # INV IMAGE WARP
+            
+            utlis.showAnswers(imgWarpColored,myIndex,grading,ans) 
+            utlis.drawGrid(imgWarpColored) 
+            imgRawDrawings = np.zeros_like(imgWarpColored) 
+            utlis.showAnswers(imgRawDrawings, myIndex, grading, ans) 
+            invMatrix = cv2.getPerspectiveTransform(pts2, pts1) 
+            imgInvWarp = cv2.warpPerspective(imgRawDrawings, invMatrix, (widthImg, heightImg)) 
 
-            # DISPLAY GRADE
-            imgRawGrade = np.zeros_like(imgGradeDisplay,np.uint8) # NEW BLANK IMAGE WITH GRADE AREA SIZE
+          
+            imgRawGrade = np.zeros_like(imgGradeDisplay,np.uint8) 
             cv2.putText(imgRawGrade,str(int(score))+"%",(70,100)
-                        ,cv2.FONT_HERSHEY_COMPLEX,3,(0,255,255),3) # ADD THE GRADE TO NEW IMAGE
-            invMatrixG = cv2.getPerspectiveTransform(ptsG2, ptsG1) # INVERSE TRANSFORMATION MATRIX
-            imgInvGradeDisplay = cv2.warpPerspective(imgRawGrade, invMatrixG, (widthImg, heightImg)) # INV IMAGE WARP
+                        ,cv2.FONT_HERSHEY_COMPLEX,3,(0,255,255),3) 
+            invMatrixG = cv2.getPerspectiveTransform(ptsG2, ptsG1) 
+            imgInvGradeDisplay = cv2.warpPerspective(imgRawGrade, invMatrixG, (widthImg, heightImg)) 
 
-            # SHOW ANSWERS AND GRADE ON FINAL IMAGE
+            
             imgFinal = cv2.addWeighted(imgFinal, 1, imgInvWarp, 1,0)
             imgFinal = cv2.addWeighted(imgFinal, 1, imgInvGradeDisplay, 1,0)
 
-            # IMAGE ARRAY FOR DISPLAY
+           
             imageArray = ([img,imgGray,imgCanny,imgContours],
                           [imgBigContour,imgThresh,imgWarpColored,imgFinal])
             cv2.imshow("Final Result", imgFinal)
@@ -218,7 +201,7 @@ while True:
         imageArray = ([img,imgGray,imgCanny,imgContours],
                       [imgBlank, imgBlank, imgBlank, imgBlank])
 
-    # LABELS FOR DISPLAY
+    
     lables = [["Original","Gray","Edges","Contours"],
               ["Biggest Contour","Threshold","Warpped","Final"]]
 
@@ -227,7 +210,6 @@ while True:
 
    
 
-    # SAVE IMAGE WHEN 's' key is pressed
     if cv2.waitKey(1) & 0xFF == ord('s'):
         cv2.imwrite("Scanned/myImage"+str(count)+".jpg",imgFinal)
         cv2.rectangle(stackedImage, ((int(stackedImage.shape[1] / 2) - 230), int(stackedImage.shape[0] / 2) + 50),
